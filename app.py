@@ -23503,8 +23503,30 @@ def card_grid_example():
 @app.route('/ai-assistant')
 @login_required
 def ai_assistant():
-    """AI chatbot for last-minute proposal help"""
-    response = make_response(render_template('ai_assistant.html'))
+    """AI chatbot for last-minute proposal help with document upload support"""
+    user_email = session.get('user_email')
+    
+    # Get user's uploaded documents
+    uploaded_docs = []
+    try:
+        docs = db.session.execute(text('''
+            SELECT id, original_filename, file_type, uploaded_at, file_size
+            FROM user_bid_documents
+            WHERE user_email = :email
+            ORDER BY uploaded_at DESC
+        '''), {'email': user_email}).fetchall()
+        
+        uploaded_docs = [{
+            'id': doc[0],
+            'filename': doc[1],
+            'file_type': doc[2],
+            'uploaded_at': doc[3],
+            'file_size': doc[4] or 0
+        } for doc in docs]
+    except Exception as e:
+        print(f"Error loading user documents: {e}")
+    
+    response = make_response(render_template('ai_assistant.html', uploaded_documents=uploaded_docs))
     # Prevent caching to avoid "Resource not cached" errors
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -23533,8 +23555,9 @@ def ai_assistant_reply():
         data = request.get_json(force=True, silent=True) or {}
         user_message = (data.get('message') or '').strip()
         role = (data.get('role') or '').strip() or None
+        user_email = session.get('user_email')  # Get user email for document context
         
-        print(f"🤖 AI Assistant - Received message: '{user_message}' with role: '{role}'")
+        print(f"🤖 AI Assistant - Received message: '{user_message}' with role: '{role}' from user: '{user_email}'")
         
         if not user_message:
             print("❌ AI Assistant - Empty message received")
@@ -23555,8 +23578,8 @@ def ai_assistant_reply():
             traceback.print_exc()
             return jsonify({'success': False, 'error': 'Knowledge base unavailable'}), 500
 
-        # Get KB answer
-        result = get_kb_answer(user_message, role=role)
+        # Get KB answer with user_email for document context
+        result = get_kb_answer(user_message, role=role, user_email=user_email)
         print(f"✅ AI Assistant - KB returned: source={result.get('source')}, answer_length={len(result.get('answer', ''))}")
 
         # Analytics logging (configured later if handler present)
@@ -23591,6 +23614,185 @@ def ai_assistant_reply():
         err_resp.headers['Pragma'] = 'no-cache'
         err_resp.headers['Expires'] = '0'
         return err_resp
+
+@app.route('/api/upload-bid-document', methods=['POST'])
+@login_required
+def upload_bid_document():
+    """
+    Upload and process bid documents (RFP, coversheet, addendum, capability statement, intake forms)
+    Supports PDF, DOCX, TXT files
+    """
+    try:
+        user_email = session.get('user_email')
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        file_type = request.form.get('file_type', 'other')
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'.pdf', '.docx', '.doc', '.txt'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'success': False, 
+                'error': f'Unsupported file type. Please upload PDF, DOCX, or TXT files.'
+            }), 400
+        
+        # Validate file size (max 10MB)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            return jsonify({
+                'success': False,
+                'error': 'File too large. Maximum size is 10MB.'
+            }), 400
+        
+        # Create uploads directory if it doesn't exist
+        upload_dir = os.path.join(os.getcwd(), 'uploads', 'bid_documents')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        import uuid
+        unique_id = str(uuid.uuid4())[:8]
+        safe_filename = f"{unique_id}_{secure_filename(file.filename)}"
+        file_path = os.path.join(upload_dir, safe_filename)
+        
+        # Save file
+        file.save(file_path)
+        print(f"✅ File saved: {file_path}")
+        
+        # Extract text from document
+        from document_extractor import extract_text_from_file, clean_extracted_text
+        success, extracted_text, error = extract_text_from_file(file_path)
+        
+        if success:
+            cleaned_text = clean_extracted_text(extracted_text)
+            print(f"✅ Text extracted: {len(cleaned_text)} characters")
+        else:
+            cleaned_text = f"Text extraction failed: {error}"
+            print(f"⚠️ Text extraction warning: {error}")
+        
+        # Store document info in database
+        try:
+            db.session.execute(text('''
+                INSERT INTO user_bid_documents 
+                (user_email, filename, original_filename, file_type, file_path, file_size, extracted_text)
+                VALUES (:email, :filename, :original, :type, :path, :size, :text)
+            '''), {
+                'email': user_email,
+                'filename': safe_filename,
+                'original': file.filename,
+                'type': file_type,
+                'path': file_path,
+                'size': file_size,
+                'text': cleaned_text
+            })
+            db.session.commit()
+            print(f"✅ Document record saved to database")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Document uploaded successfully',
+                'filename': file.filename,
+                'file_type': file_type,
+                'size': file_size,
+                'text_extracted': success
+            })
+            
+        except Exception as db_error:
+            db.session.rollback()
+            # Clean up file if database save fails
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            print(f"❌ Database error: {db_error}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save document information'
+            }), 500
+            
+    except Exception as e:
+        print(f"Upload error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Upload failed: {str(e)}'
+        }), 500
+
+@app.route('/api/delete-bid-document/<int:doc_id>', methods=['DELETE'])
+@login_required
+def delete_bid_document(doc_id):
+    """Delete a user's uploaded bid document"""
+    try:
+        user_email = session.get('user_email')
+        
+        # Get document info
+        doc = db.session.execute(text('''
+            SELECT file_path FROM user_bid_documents
+            WHERE id = :id AND user_email = :email
+        '''), {'id': doc_id, 'email': user_email}).fetchone()
+        
+        if not doc:
+            return jsonify({'success': False, 'error': 'Document not found'}), 404
+        
+        # Delete file from filesystem
+        file_path = doc[0]
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"✅ File deleted: {file_path}")
+        
+        # Delete database record
+        db.session.execute(text('''
+            DELETE FROM user_bid_documents
+            WHERE id = :id AND user_email = :email
+        '''), {'id': doc_id, 'email': user_email})
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Document deleted successfully'})
+        
+    except Exception as e:
+        print(f"Delete error: {e}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Failed to delete document'}), 500
+
+@app.route('/api/get-bid-documents', methods=['GET'])
+@login_required
+def get_bid_documents():
+    """Get list of user's uploaded bid documents"""
+    try:
+        user_email = session.get('user_email')
+        
+        docs = db.session.execute(text('''
+            SELECT id, original_filename, file_type, uploaded_at, file_size,
+                   LENGTH(extracted_text) as text_length
+            FROM user_bid_documents
+            WHERE user_email = :email
+            ORDER BY uploaded_at DESC
+        '''), {'email': user_email}).fetchall()
+        
+        documents = [{
+            'id': doc[0],
+            'filename': doc[1],
+            'file_type': doc[2],
+            'uploaded_at': str(doc[3]),
+            'file_size': doc[4] or 0,
+            'has_text': (doc[5] or 0) > 0
+        } for doc in docs]
+        
+        return jsonify({'success': True, 'documents': documents})
+        
+    except Exception as e:
+        print(f"Get documents error: {e}")
+        return jsonify({'success': False, 'documents': []}), 500
 
 @app.route('/federal-coming-soon')
 def federal_coming_soon():

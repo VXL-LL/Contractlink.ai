@@ -163,6 +163,108 @@ fetch('/api/ai-assistant-reply', {
 
         <!-- Sidebar - Resources -->
         <div class="col-lg-4">
+            <!-- Document Upload Section -->
+            <div class="card shadow-sm mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>Upload Bid Documents
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Upload your bid documents to get AI assistance with filling them out and generating accurate responses.
+                    </p>
+                    
+                    <!-- Document Type Selector -->
+                    <div class="mb-3">
+                        <label for="documentType" class="form-label fw-bold small">Document Type</label>
+                        <select id="documentType" class="form-select form-select-sm">
+                            <option value="rfp">RFP / Solicitation</option>
+                            <option value="coversheet">Cover Sheet</option>
+                            <option value="addendum">Addendum / Amendment</option>
+                            <option value="capability">Capability Statement</option>
+                            <option value="intake">Intake Form</option>
+                            <option value="schedule">Pricing Schedule</option>
+                            <option value="other">Other Document</option>
+                        </select>
+                    </div>
+                    
+                    <!-- File Upload Zone -->
+                    <div class="border rounded p-3 mb-3 text-center" 
+                         id="dropZone"
+                         style="border-style: dashed !important; background: #f8f9fa; cursor: pointer;"
+                         ondrop="handleDrop(event)" 
+                         ondragover="handleDragOver(event)"
+                         ondragleave="handleDragLeave(event)"
+                         onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-file-upload text-primary mb-2" style="font-size: 2rem;"></i>
+                        <p class="mb-1 fw-bold">Drag & Drop or Click to Upload</p>
+                        <small class="text-muted">PDF, DOCX, or TXT (Max 10MB)</small>
+                        <input type="file" 
+                               id="fileInput" 
+                               accept=".pdf,.docx,.doc,.txt" 
+                               style="display: none;" 
+                               onchange="handleFileSelect(event)">
+                    </div>
+                    
+                    <!-- Upload Progress -->
+                    <div id="uploadProgress" class="mb-3" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 100%">
+                                Uploading...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Uploaded Documents List -->
+                    <div id="uploadedDocsList">
+                        {% if uploaded_documents %}
+                        <h6 class="fw-bold mb-2">
+                            <i class="fas fa-folder-open me-1"></i>Your Documents ({{ uploaded_documents|length }})
+                        </h6>
+                        <div class="list-group list-group-flush">
+                            {% for doc in uploaded_documents %}
+                            <div class="list-group-item px-0 py-2" id="doc-{{ doc.id }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center mb-1">
+                                            <span class="badge bg-{{ 'success' if doc.file_type == 'rfp' else 'info' if doc.file_type == 'capability' else 'secondary' }} me-2">
+                                                {{ doc.file_type|upper }}
+                                            </span>
+                                            <small class="text-muted">{{ (doc.file_size / 1024)|round(1) }} KB</small>
+                                        </div>
+                                        <p class="mb-0 small fw-bold">{{ doc.filename }}</p>
+                                        <small class="text-muted">{{ doc.uploaded_at[:16] }}</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteDocument({{ doc.id }})"
+                                            title="Delete document">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info alert-sm mb-0">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <small>No documents uploaded yet</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Instructions -->
+                    <div class="mt-3 p-2 bg-light rounded">
+                        <small class="text-muted">
+                            <i class="fas fa-magic text-primary me-1"></i>
+                            <strong>How it helps:</strong> The AI will analyze your uploaded documents and provide context-aware assistance for filling out forms, answering requirements, and generating compliant responses.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Quick Links -->
             <div class="card shadow-sm mb-4">
                 <div class="card-body">
@@ -218,6 +320,167 @@ fetch('/api/ai-assistant-reply', {
 
                 <!-- External AI Assistant Script (moved out of inline to avoid potential blocking) -->
                 <script src="{{ url_for('static', filename='js/ai_assistant.js') }}?v=20251117" defer></script>
+                
+                <!-- Document Upload JavaScript -->
+                <script>
+                // Drag and drop handlers
+                function handleDragOver(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('dropZone').style.background = '#e3f2fd';
+                    document.getElementById('dropZone').style.borderColor = '#2196F3';
+                }
+                
+                function handleDragLeave(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    document.getElementById('dropZone').style.background = '#f8f9fa';
+                    document.getElementById('dropZone').style.borderColor = '#dee2e6';
+                }
+                
+                function handleDrop(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDragLeave(e);
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        uploadFile(files[0]);
+                    }
+                }
+                
+                function handleFileSelect(e) {
+                    const files = e.target.files;
+                    if (files.length > 0) {
+                        uploadFile(files[0]);
+                    }
+                }
+                
+                async function uploadFile(file) {
+                    console.log('📤 Uploading file:', file.name);
+                    
+                    // Validate file type
+                    const allowedTypes = ['.pdf', '.docx', '.doc', '.txt'];
+                    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                    
+                    if (!allowedTypes.includes(fileExt)) {
+                        alert('❌ Unsupported file type. Please upload PDF, DOCX, or TXT files.');
+                        return;
+                    }
+                    
+                    // Validate file size (10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                        alert('❌ File too large. Maximum size is 10MB.');
+                        return;
+                    }
+                    
+                    // Show progress
+                    document.getElementById('uploadProgress').style.display = 'block';
+                    
+                    // Prepare form data
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('file_type', document.getElementById('documentType').value);
+                    
+                    try {
+                        const response = await fetch('/api/upload-bid-document', {
+                            method: 'POST',
+                            body: formData,
+                            credentials: 'same-origin'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            console.log('✅ Upload successful:', result);
+                            
+                            // Show success message
+                            const chatMessages = document.getElementById('chatMessages');
+                            const successMsg = `
+                                <div class="message-wrapper mb-3">
+                                    <div class="d-flex">
+                                        <div class="avatar bg-success text-white rounded-circle me-3 flex-shrink-0" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas fa-check"></i>
+                                        </div>
+                                        <div class="message-content bg-light rounded-3 p-3" style="max-width: 75%;">
+                                            <p class="mb-2"><strong>System</strong></p>
+                                            <p class="mb-0">✅ <strong>${result.filename}</strong> uploaded successfully! I can now help you with this document. Ask me questions about it or request assistance filling it out.</p>
+                                            <small class="text-muted">Just now</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            chatMessages.insertAdjacentHTML('beforeend', successMsg);
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                            
+                            // Reload page to refresh document list
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 2000);
+                        } else {
+                            alert('❌ Upload failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('❌ Upload error:', error);
+                        alert('❌ Upload failed. Please try again.');
+                    } finally {
+                        document.getElementById('uploadProgress').style.display = 'none';
+                        document.getElementById('fileInput').value = '';
+                    }
+                }
+                
+                async function deleteDocument(docId) {
+                    if (!confirm('Are you sure you want to delete this document?')) {
+                        return;
+                    }
+                    
+                    console.log('🗑️ Deleting document:', docId);
+                    
+                    try {
+                        const response = await fetch(`/api/delete-bid-document/${docId}`, {
+                            method: 'DELETE',
+                            credentials: 'same-origin'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            console.log('✅ Document deleted');
+                            
+                            // Remove from UI
+                            const docElement = document.getElementById(`doc-${docId}`);
+                            if (docElement) {
+                                docElement.remove();
+                            }
+                            
+                            // Show feedback in chat
+                            const chatMessages = document.getElementById('chatMessages');
+                            const deleteMsg = `
+                                <div class="message-wrapper mb-3">
+                                    <div class="d-flex">
+                                        <div class="avatar bg-warning text-white rounded-circle me-3 flex-shrink-0" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas fa-trash"></i>
+                                        </div>
+                                        <div class="message-content bg-light rounded-3 p-3" style="max-width: 75%;">
+                                            <p class="mb-2"><strong>System</strong></p>
+                                            <p class="mb-0">🗑️ Document deleted successfully.</p>
+                                            <small class="text-muted">Just now</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            chatMessages.insertAdjacentHTML('beforeend', deleteMsg);
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        } else {
+                            alert('❌ Delete failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('❌ Delete error:', error);
+                        alert('❌ Delete failed. Please try again.');
+                    }
+                }
+                </script>
+                
                 <noscript>
                     <div class="alert alert-danger mt-3">JavaScript is required for the AI Assistant to function. Please enable JavaScript.</div>
                 </noscript>

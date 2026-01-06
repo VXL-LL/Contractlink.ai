@@ -210,16 +210,17 @@ FALLBACK = (
     "I want to help but need a bit more detail. Please clarify if you're asking about pricing, proposal structure, navigation, templates, compliance, or past performance. You can also try: 'pricing strategy', 'technical approach outline', or 'where do I find templates'."
 )
 
-def get_kb_answer(user_text: str, role: Optional[str] = None) -> Dict[str, str]:
+def get_kb_answer(user_text: str, role: Optional[str] = None, user_email: Optional[str] = None) -> Dict[str, str]:
     """Return the best KB answer for a user query.
 
     Contract:
-    - Input: free-form user_text; optional role string (e.g. "economist", "proposal manager", "it").
+    - Input: free-form user_text; optional role string (e.g. "economist", "proposal manager", "it"); optional user_email to fetch uploaded documents.
     - Scoring order:
-        1. Exact intent tag containment (longer tags prioritized)
-        2. Keyword frequency match
-        3. Role bias (+2) if role substring appears in any article intent tag
-        4. Fallback answer when no matches
+        1. Check if query references uploaded documents (e.g., "my RFP", "uploaded document", "fill out")
+        2. Exact intent tag containment (longer tags prioritized)
+        3. Keyword frequency match
+        4. Role bias (+2) if role substring appears in any article intent tag
+        5. Fallback answer when no matches
     - Output: dict with keys: answer (HTML-capable string), followups (pipe-delimited), source (article id or 'fallback').
     - Never raises; returns fallback on unexpected conditions.
 
@@ -229,6 +230,70 @@ def get_kb_answer(user_text: str, role: Optional[str] = None) -> Dict[str, str]:
     - Overlapping tags (e.g. 'proposal' vs 'proposal manager') -> longer-first ordering prevents generic overshadowing.
     """
     cleaned = user_text.lower()
+    
+    # Check if user is asking about their uploaded documents
+    document_keywords = ['my rfp', 'uploaded document', 'fill out', 'my document', 'this rfp', 
+                         'my coversheet', 'my addendum', 'my capability statement', 'intake form',
+                         'help me with', 'complete this', 'answer this']
+    
+    if any(kw in cleaned for kw in document_keywords) and user_email:
+        # Try to get user's uploaded documents
+        try:
+            from flask import current_app
+            from sqlalchemy import text
+            
+            with current_app.app_context():
+                from database import db
+                
+                docs = db.session.execute(text('''
+                    SELECT original_filename, file_type, extracted_text
+                    FROM user_bid_documents
+                    WHERE user_email = :email
+                    ORDER BY uploaded_at DESC
+                    LIMIT 5
+                '''), {'email': user_email}).fetchall()
+                
+                if docs:
+                    # Build context from uploaded documents
+                    doc_context = "<strong>Your Uploaded Documents:</strong><br>"
+                    for idx, doc in enumerate(docs, 1):
+                        filename = doc[0]
+                        file_type = doc[1]
+                        text_preview = (doc[2] or '')[:500]  # First 500 chars
+                        
+                        doc_context += f"<br>{idx}. <strong>{filename}</strong> ({file_type})<br>"
+                        if text_preview:
+                            doc_context += f"<em>Content preview:</em> {text_preview}...<br>"
+                    
+                    doc_context += ("<br><strong>How I can help:</strong><br>"
+                                   "• Answer specific questions about requirements in your documents<br>"
+                                   "• Help you fill out forms with appropriate responses<br>"
+                                   "• Suggest compliance strategies based on RFP sections<br>"
+                                   "• Review your uploaded capability statement for improvements<br>"
+                                   "• Provide guidance on addendum changes<br><br>"
+                                   "<em>Tip:</em> Be specific about which document and section you need help with. "
+                                   "For example: 'What does Section 3.2 of my RFP require?' or "
+                                   "'Help me fill out the experience section of my coversheet.'")
+                    
+                    return {
+                        "answer": doc_context,
+                        "followups": "Ask about specific RFP sections | Request form fill-in help | Get compliance guidance",
+                        "source": "uploaded_documents"
+                    }
+                else:
+                    return {
+                        "answer": ("<strong>No Documents Found</strong><br>"
+                                  "I notice you're asking about documents, but you haven't uploaded any yet. "
+                                  "Upload your RFP, coversheet, addendum, capability statement, or intake forms "
+                                  "using the document upload section on the right, and I'll be able to help you "
+                                  "analyze requirements and fill out sections!<br><br>"
+                                  "<em>Supported formats:</em> PDF, DOCX, TXT (up to 10MB)"),
+                        "followups": "Upload a document | Ask about proposal structure | Need pricing guidance",
+                        "source": "no_documents"
+                    }
+        except Exception as e:
+            # If document lookup fails, continue with regular KB matching
+            print(f"Document lookup error: {e}")
 
     # Direct intent tag match (prefer more specific/longer tags first)
     for tag in sorted(_INTENT_MAP.keys(), key=len, reverse=True):
