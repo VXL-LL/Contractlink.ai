@@ -240,15 +240,21 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="businessType" class="form-label">Business Type</label>
-                            <select class="form-select" id="businessType" name="business_type">
-                                <option value="">Select Type</option>
-                                <option value="Sole Proprietorship">Sole Proprietorship</option>
-                                <option value="Partnership">Partnership</option>
-                                <option value="LLC">LLC</option>
-                                <option value="Corporation">Corporation</option>
-                                <option value="S-Corporation">S-Corporation</option>
-                                <option value="Non-Profit">Non-Profit</option>
-                            </select>
+                            <div class="d-flex gap-2">
+                                <select class="form-select" id="businessType" name="business_type">
+                                    <option value="">Select Type</option>
+                                    <option value="Sole Proprietorship">Sole Proprietorship</option>
+                                    <option value="Partnership">Partnership</option>
+                                    <option value="LLC">LLC</option>
+                                    <option value="Corporation">Corporation</option>
+                                    <option value="S-Corporation">S-Corporation</option>
+                                    <option value="Non-Profit">Non-Profit</option>
+                                </select>
+                                <button type="button" class="btn btn-info" onclick="autoPopulateCompany()" title="Auto-fill from web sources">
+                                    <i class="fas fa-magic"></i> Auto-Fill
+                                </button>
+                            </div>
+                            <small class="text-muted">Fetches data from SAM.gov, Google, company website</small>
                         </div>
                     </div>
 
@@ -581,6 +587,74 @@ function toggleCompanyStatus(companyId, newStatus) {
     .catch(error => {
         console.error('Error:', error);
         alert(`Error ${action}ing company. Please try again.`);
+    });
+}
+
+function autoPopulateCompany() {
+    const companyName = document.getElementById('companyName').value;
+    const city = document.getElementById('city').value;
+    const state = document.getElementById('state').value;
+    const website = document.getElementById('website').value;
+    
+    if (!companyName) {
+        alert('Please enter a company name first');
+        return;
+    }
+    
+    // Show loading indicator
+    const autoFillBtn = event.target.closest('button');
+    const originalHTML = autoFillBtn.innerHTML;
+    autoFillBtn.disabled = true;
+    autoFillBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+    
+    fetch('/api/auto-populate-company', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            company_name: companyName,
+            city: city,
+            state: state,
+            website: website
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        autoFillBtn.disabled = false;
+        autoFillBtn.innerHTML = originalHTML;
+        
+        if (data.success) {
+            // Populate form fields with fetched data
+            const fetchedData = data.data;
+            
+            if (fetchedData.company_ein) document.getElementById('ein').value = fetchedData.company_ein;
+            if (fetchedData.company_duns) document.getElementById('dunsNumber').value = fetchedData.company_duns;
+            if (fetchedData.company_cage_code) document.getElementById('cageCode').value = fetchedData.company_cage_code;
+            if (fetchedData.company_uei) document.getElementById('ueiNumber').value = fetchedData.company_uei;
+            if (fetchedData.address) document.getElementById('streetAddress').value = fetchedData.address;
+            if (fetchedData.city) document.getElementById('city').value = fetchedData.city;
+            if (fetchedData.state) document.getElementById('state').value = fetchedData.state;
+            if (fetchedData.zip_code) document.getElementById('zipCode').value = fetchedData.zip_code;
+            if (fetchedData.phone) document.getElementById('phone').value = fetchedData.phone;
+            if (fetchedData.website) document.getElementById('website').value = fetchedData.website;
+            if (fetchedData.primary_contact_email) document.getElementById('email').value = fetchedData.primary_contact_email;
+            if (fetchedData.naics_codes) document.getElementById('primaryNaics').value = fetchedData.naics_codes;
+            if (fetchedData.certifications) document.getElementById('certifications').value = fetchedData.certifications;
+            if (fetchedData.business_type) document.getElementById('businessType').value = fetchedData.business_type;
+            if (fetchedData.years_in_business) document.getElementById('yearEstablished').value = fetchedData.years_in_business;
+            if (fetchedData.past_performance) document.getElementById('pastPerformance').value = fetchedData.past_performance;
+            
+            alert(`✅ Auto-filled from: ${data.sources_used.join(', ')}\n\nPlease review and update as needed.`);
+        } else {
+            alert(data.message || 'No data found. Please enter information manually.');
+        }
+    })
+    .catch(error => {
+        autoFillBtn.disabled = false;
+        autoFillBtn.innerHTML = originalHTML;
+        console.error('Error:', error);
+        alert('Error fetching company data. Please try again.');
     });
 }
 </script>

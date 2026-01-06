@@ -24305,6 +24305,56 @@ def toggle_company_status(company_id):
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/auto-populate-company', methods=['POST'])
+@login_required
+def auto_populate_company():
+    """Auto-populate company information from web sources (SAM.gov, Google, company website)"""
+    try:
+        company_name = request.json.get('company_name')
+        city = request.json.get('city')
+        state = request.json.get('state')
+        website = request.json.get('website')
+        
+        if not company_name:
+            return jsonify({'success': False, 'message': 'Company name is required'}), 400
+        
+        print(f"🔍 Auto-populating data for: {company_name}")
+        
+        # Import the company info fetcher
+        try:
+            from company_info_fetcher import enrich_company_profile
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'message': 'Company info fetcher not available'
+            }), 500
+        
+        # Fetch company data from web sources
+        result = enrich_company_profile(company_name, city, state, website)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': f"Found data from: {', '.join(result['sources_used'])}",
+                'data': result['data'],
+                'sources_used': result['sources_used']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No company data found. Please enter information manually.',
+                'data': {}
+            })
+        
+    except Exception as e:
+        print(f"❌ Auto-populate error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching company data: {str(e)}'
+        }), 500
+
 @app.route('/federal-coming-soon')
 def federal_coming_soon():
     """Coming soon page for federal contracts until November 3"""
