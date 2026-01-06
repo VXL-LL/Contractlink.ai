@@ -17,6 +17,74 @@ All setup steps have been completed:
 
 ## Latest Features ✅ DEPLOYED
 
+### 🏢 Multi-Company Management System (Jan 5, 2026) - LIVE ✅
+**Admin users (proposal writers, engineers, consultants) can now manage bid documents for multiple client companies:**
+
+**Features Implemented:**
+1. ✅ **Company Profiles**: 30-field database schema for comprehensive federal contracting data
+2. ✅ **Management Interface**: `/admin/manage-companies` with full CRUD operations
+3. ✅ **Company Selector**: Dropdown in AI Assistant for linking documents to companies
+4. ✅ **Federal Registration**: EIN, DUNS, CAGE Code, UEI Number tracking
+5. ✅ **NAICS & Certifications**: Primary/secondary NAICS codes, 8(a), WOSB, SDVOSB tracking
+6. ✅ **Capabilities Tracking**: Past performance, bonding capacity, insurance coverage
+7. ✅ **Status Management**: Activate/deactivate companies, inactive badge display
+8. ✅ **Document Organization**: Link uploaded documents to specific client companies
+
+**Database Schema:**
+- **Table**: `company_profiles` (30 columns)
+  - Basic: id, admin_email, company_name, business_type
+  - Federal: ein, duns_number, cage_code, uei_number
+  - Address: street_address, city, state, zip_code
+  - Contact: phone, email, website
+  - Industry: primary_naics_codes, secondary_naics_codes, certifications
+  - Details: year_established, annual_revenue, employee_count, service_areas
+  - Capabilities: past_performance_summary, bonding_capacity, insurance_coverage
+  - Status: is_active, created_at, updated_at
+- **Table**: `company_bid_documents` (linking table)
+  - Many-to-many: company_id, document_id, relationship, notes
+- **Enhanced**: `user_bid_documents.company_id` column (foreign key)
+
+**Routes & API Endpoints:**
+- `GET /admin/manage-companies` - Company management dashboard
+- `POST /api/create-company` - Create new company profile
+- `GET /api/get-company/<id>` - Fetch company details
+- `PUT /api/update-company/<id>` - Update company profile
+- `DELETE /api/delete-company/<id>` - Delete company
+- `POST /api/toggle-company-status/<id>` - Activate/deactivate
+
+**User Interface:**
+- **Company Cards**: Display with EIN, CAGE, UEI, certifications, NAICS codes
+- **Add/Edit Modal**: 8-section form (Basic Info, Federal Registration, Address, Contact, NAICS, Details, Capabilities, Additional)
+- **Action Buttons**: Edit, Delete, Activate/Deactivate
+- **Company Selector**: Dropdown in AI Assistant for document upload
+- **Status Badges**: Business type badge, inactive badge (red)
+
+**Security:**
+- Session-based authentication (`@login_required`)
+- Ownership verification (admin can only see their own companies)
+- Parameterized SQL queries (injection prevention)
+- Data validation (required fields, type checking)
+
+**Documentation:**
+- `COMPANY_MANAGEMENT_GUIDE.md` - Complete technical guide (1000+ lines)
+- `COMPANY_MANAGEMENT_QUICK_REF.md` - Quick reference card (300+ lines)
+- `COMPANY_MANAGEMENT_DEPLOYMENT.md` - Deployment summary
+
+**Use Cases:**
+- Proposal writer managing 10+ client companies
+- Consultant organizing documents by client
+- Engineer tracking certifications across multiple firms
+- Multi-company bid document organization
+
+**Benefits:**
+- Professional multi-tenant architecture
+- Complete federal contracting data capture
+- Organized document management by client
+- Track certifications, NAICS codes, past performance
+- Activate/deactivate companies as projects complete
+
+**Commits:** `[current]` - Full multi-company management system deployed
+
 ### 📁 Bid Document Upload System (Jan 5, 2026) - LIVE ✅
 **AI Assistant now supports uploading and analyzing bid documents for intelligent proposal assistance:**
 
@@ -29,14 +97,15 @@ All setup steps have been completed:
 6. ✅ **Document Management**: List, view metadata, delete documents with one click
 7. ✅ **AI Context Awareness**: Chatbot analyzes uploaded documents for context-specific answers
 8. ✅ **Smart Query Detection**: Recognizes document-related questions ("my RFP", "fill out", "help me with")
+9. ✅ **Company Integration**: Link documents to specific client companies via dropdown selector
 
 **Database Schema:**
 - **Table**: `user_bid_documents`
-- **Columns**: id, user_email, filename, original_filename, file_type, file_path, file_size, extracted_text, uploaded_at, last_used, metadata
+- **Columns**: id, user_email, filename, original_filename, file_type, file_path, file_size, extracted_text, uploaded_at, last_used, metadata, company_id
 - **Indexes**: user_email (fast lookups), file_type (filtering)
 
 **API Endpoints:**
-- `POST /api/upload-bid-document` - Upload file with validation and text extraction
+- `POST /api/upload-bid-document` - Upload file with validation, text extraction, company linking
 - `DELETE /api/delete-bid-document/<id>` - Remove user document
 - `GET /api/get-bid-documents` - List all user documents
 

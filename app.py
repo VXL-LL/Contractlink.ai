@@ -23510,7 +23510,7 @@ def ai_assistant():
     uploaded_docs = []
     try:
         docs = db.session.execute(text('''
-            SELECT id, original_filename, file_type, uploaded_at, file_size
+            SELECT id, original_filename, file_type, uploaded_at, file_size, company_id
             FROM user_bid_documents
             WHERE user_email = :email
             ORDER BY uploaded_at DESC
@@ -23521,12 +23521,34 @@ def ai_assistant():
             'filename': doc[1],
             'file_type': doc[2],
             'uploaded_at': doc[3],
-            'file_size': doc[4] or 0
+            'file_size': doc[4] or 0,
+            'company_id': doc[5]
         } for doc in docs]
     except Exception as e:
         print(f"Error loading user documents: {e}")
     
-    response = make_response(render_template('ai_assistant.html', uploaded_documents=uploaded_docs))
+    # Get user's company profiles (for admins managing multiple clients)
+    user_companies = []
+    try:
+        companies = db.session.execute(text('''
+            SELECT id, company_name, business_type, city, state
+            FROM company_profiles
+            WHERE admin_email = :email AND is_active = 1
+            ORDER BY company_name
+        '''), {'email': user_email}).fetchall()
+        
+        user_companies = [{
+            'id': comp[0],
+            'company_name': comp[1],
+            'business_type': comp[2],
+            'location': f"{comp[3]}, {comp[4]}" if comp[3] and comp[4] else None
+        } for comp in companies]
+    except Exception as e:
+        print(f"Error loading user companies: {e}")
+    
+    response = make_response(render_template('ai_assistant.html', 
+                                            uploaded_documents=uploaded_docs,
+                                            user_companies=user_companies))
     # Prevent caching to avoid "Resource not cached" errors
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -23633,7 +23655,8 @@ def upload_bid_document():
         
         file = request.files['file']
         file_type = request.form.get('file_type', 'other')
-        print(f"📄 File: {file.filename}, Type: {file_type}")
+        company_id = request.form.get('company_id')  # Optional: which client company this is for
+        print(f"📄 File: {file.filename}, Type: {file_type}, Company ID: {company_id}")
         
         if file.filename == '':
             print("❌ Empty filename")
@@ -23697,8 +23720,8 @@ def upload_bid_document():
         try:
             db.session.execute(text('''
                 INSERT INTO user_bid_documents 
-                (user_email, filename, original_filename, file_type, file_path, file_size, extracted_text)
-                VALUES (:email, :filename, :original, :type, :path, :size, :text)
+                (user_email, filename, original_filename, file_type, file_path, file_size, extracted_text, company_id)
+                VALUES (:email, :filename, :original, :type, :path, :size, :text, :company_id)
             '''), {
                 'email': user_email,
                 'filename': safe_filename_str,
@@ -23706,10 +23729,11 @@ def upload_bid_document():
                 'type': file_type,
                 'path': file_path,
                 'size': file_size,
-                'text': cleaned_text
+                'text': cleaned_text,
+                'company_id': int(company_id) if company_id and company_id.isdigit() else None
             })
             db.session.commit()
-            print(f"✅ Document record saved to database for {user_email}")
+            print(f"✅ Document record saved to database for {user_email} (Company ID: {company_id})")
             
             return jsonify({
                 'success': True,
@@ -23807,6 +23831,325 @@ def get_bid_documents():
     except Exception as e:
         print(f"Get documents error: {e}")
         return jsonify({'success': False, 'documents': []}), 500
+
+@app.route('/admin/manage-companies')
+@login_required
+def manage_companies():
+    """Company profile management for admins (proposal writers, engineers, consultants)"""
+    user_email = session.get('user_email')
+    
+    try:
+        # Query all companies managed by this admin
+        companies = db.session.execute(text('''
+            SELECT 
+                id, company_name, business_type, company_ein, company_duns, company_cage_code, company_uei,
+                address, city, state, zip_code, phone, website,
+                naics_codes, certifications,
+                years_in_business, annual_revenue, employee_count, service_regions,
+                past_performance, bonding_capacity, insurance_info,
+                notes, is_active, created_at, updated_at
+            FROM company_profiles 
+            WHERE admin_email = :email 
+            ORDER BY company_name ASC
+        '''), {'email': user_email}).fetchall()
+        
+        print(f"📊 Admin {user_email} managing {len(companies)} companies")
+        
+        return render_template('manage_companies.html', companies=companies)
+        
+    except Exception as e:
+        print(f"❌ Error loading company profiles: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading company profiles. Please try again.', 'danger')
+        return redirect(url_for('ai_assistant'))
+
+@app.route('/api/create-company', methods=['POST'])
+@login_required
+def create_company():
+    """Create new company profile"""
+    try:
+        user_email = session.get('user_email')
+        
+        # Get form data
+        company_name = request.form.get('company_name')
+        if not company_name:
+            return jsonify({'success': False, 'message': 'Company name is required'}), 400
+        
+        # Insert company
+        db.session.execute(text('''
+            INSERT INTO company_profiles (
+                admin_email, company_name, business_type, company_ein, company_duns, company_cage_code, company_uei,
+                address, city, state, zip_code, phone, website,
+                naics_codes, certifications,
+                years_in_business, annual_revenue, employee_count, service_regions,
+                past_performance, bonding_capacity, insurance_info,
+                notes, is_active, created_at, updated_at
+            ) VALUES (
+                :admin_email, :company_name, :business_type, :company_ein, :company_duns, :company_cage_code, :company_uei,
+                :address, :city, :state, :zip_code, :phone, :website,
+                :naics_codes, :certifications,
+                :years_in_business, :annual_revenue, :employee_count, :service_regions,
+                :past_performance, :bonding_capacity, :insurance_info,
+                :notes, :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+        '''), {
+            'admin_email': user_email,
+            'company_name': company_name,
+            'business_type': request.form.get('business_type'),
+            'company_ein': request.form.get('ein'),
+            'company_duns': request.form.get('duns_number'),
+            'company_cage_code': request.form.get('cage_code'),
+            'company_uei': request.form.get('uei_number'),
+            'address': request.form.get('street_address'),
+            'city': request.form.get('city'),
+            'state': request.form.get('state'),
+            'zip_code': request.form.get('zip_code'),
+            'phone': request.form.get('phone'),
+            'website': request.form.get('website'),
+            'naics_codes': request.form.get('primary_naics_codes'),
+            'certifications': request.form.get('certifications'),
+            'years_in_business': request.form.get('year_established') or None,
+            'annual_revenue': request.form.get('annual_revenue'),
+            'employee_count': request.form.get('employee_count') or None,
+            'service_regions': request.form.get('service_areas'),
+            'past_performance': request.form.get('past_performance_summary'),
+            'bonding_capacity': request.form.get('bonding_capacity'),
+            'insurance_info': request.form.get('insurance_coverage'),
+            'notes': request.form.get('notes'),
+            'is_active': request.form.get('is_active', '1')
+        })
+        
+        db.session.commit()
+        print(f"✅ Company created: {company_name} by {user_email}")
+        
+        return jsonify({'success': True, 'message': 'Company created successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error creating company: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/get-company/<int:company_id>', methods=['GET'])
+@login_required
+def get_company(company_id):
+    """Get company details"""
+    try:
+        user_email = session.get('user_email')
+        
+        company = db.session.execute(text('''
+            SELECT * FROM company_profiles 
+            WHERE id = :id AND admin_email = :email
+        '''), {'id': company_id, 'email': user_email}).fetchone()
+        
+        if not company:
+            return jsonify({'success': False, 'message': 'Company not found'}), 404
+        
+        # Convert to dict
+        company_dict = {
+            'id': company.id,
+            'company_name': company.company_name,
+            'business_type': company.business_type,
+            'ein': company.ein,
+            'duns_number': company.duns_number,
+            'cage_code': company.cage_code,
+            'uei_number': company.uei_number,
+            'street_address': company.street_address,
+            'city': company.city,
+            'state': company.state,
+            'zip_code': company.zip_code,
+            'phone': company.phone,
+            'email': company.email,
+            'website': company.website,
+            'primary_naics_codes': company.primary_naics_codes,
+            'secondary_naics_codes': company.secondary_naics_codes,
+            'certifications': company.certifications,
+            'year_established': company.year_established,
+            'annual_revenue': company.annual_revenue,
+            'employee_count': company.employee_count,
+            'service_areas': company.service_areas,
+            'past_performance_summary': company.past_performance_summary,
+            'bonding_capacity': company.bonding_capacity,
+            'insurance_coverage': company.insurance_coverage,
+            'key_personnel': company.key_personnel,
+            'capability_statement_url': company.capability_statement_url,
+            'business_hours': company.business_hours,
+            'preferred_contact_method': company.preferred_contact_method,
+            'notes': company.notes,
+            'is_active': company.is_active
+        }
+        
+        return jsonify({'success': True, 'company': company_dict})
+        
+    except Exception as e:
+        print(f"❌ Error fetching company: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/update-company/<int:company_id>', methods=['PUT', 'POST'])
+@login_required
+def update_company(company_id):
+    """Update company profile"""
+    try:
+        user_email = session.get('user_email')
+        
+        # Verify ownership
+        company = db.session.execute(text('''
+            SELECT id FROM company_profiles WHERE id = :id AND admin_email = :email
+        '''), {'id': company_id, 'email': user_email}).fetchone()
+        
+        if not company:
+            return jsonify({'success': False, 'message': 'Company not found'}), 404
+        
+        # Update company
+        db.session.execute(text('''
+            UPDATE company_profiles SET
+                company_name = :company_name,
+                business_type = :business_type,
+                ein = :ein,
+                duns_number = :duns_number,
+                cage_code = :cage_code,
+                uei_number = :uei_number,
+                street_address = :street_address,
+                city = :city,
+                state = :state,
+                zip_code = :zip_code,
+                phone = :phone,
+                email = :email,
+                website = :website,
+                primary_naics_codes = :primary_naics_codes,
+                secondary_naics_codes = :secondary_naics_codes,
+                certifications = :certifications,
+                year_established = :year_established,
+                annual_revenue = :annual_revenue,
+                employee_count = :employee_count,
+                service_areas = :service_areas,
+                past_performance_summary = :past_performance_summary,
+                bonding_capacity = :bonding_capacity,
+                insurance_coverage = :insurance_coverage,
+                key_personnel = :key_personnel,
+                capability_statement_url = :capability_statement_url,
+                business_hours = :business_hours,
+                preferred_contact_method = :preferred_contact_method,
+                notes = :notes,
+                is_active = :is_active,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+        '''), {
+            'id': company_id,
+            'company_name': request.form.get('company_name'),
+            'business_type': request.form.get('business_type'),
+            'ein': request.form.get('ein'),
+            'duns_number': request.form.get('duns_number'),
+            'cage_code': request.form.get('cage_code'),
+            'uei_number': request.form.get('uei_number'),
+            'street_address': request.form.get('street_address'),
+            'city': request.form.get('city'),
+            'state': request.form.get('state'),
+            'zip_code': request.form.get('zip_code'),
+            'phone': request.form.get('phone'),
+            'email': request.form.get('email'),
+            'website': request.form.get('website'),
+            'primary_naics_codes': request.form.get('primary_naics_codes'),
+            'secondary_naics_codes': request.form.get('secondary_naics_codes'),
+            'certifications': request.form.get('certifications'),
+            'year_established': request.form.get('year_established') or None,
+            'annual_revenue': request.form.get('annual_revenue'),
+            'employee_count': request.form.get('employee_count') or None,
+            'service_areas': request.form.get('service_areas'),
+            'past_performance_summary': request.form.get('past_performance_summary'),
+            'bonding_capacity': request.form.get('bonding_capacity'),
+            'insurance_coverage': request.form.get('insurance_coverage'),
+            'key_personnel': request.form.get('key_personnel'),
+            'capability_statement_url': request.form.get('capability_statement_url'),
+            'business_hours': request.form.get('business_hours'),
+            'preferred_contact_method': request.form.get('preferred_contact_method'),
+            'notes': request.form.get('notes'),
+            'is_active': request.form.get('is_active', '1')
+        })
+        
+        db.session.commit()
+        print(f"✅ Company updated: ID {company_id} by {user_email}")
+        
+        return jsonify({'success': True, 'message': 'Company updated successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error updating company: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/delete-company/<int:company_id>', methods=['DELETE'])
+@login_required
+def delete_company(company_id):
+    """Delete company profile"""
+    try:
+        user_email = session.get('user_email')
+        
+        # Verify ownership
+        company = db.session.execute(text('''
+            SELECT company_name FROM company_profiles WHERE id = :id AND admin_email = :email
+        '''), {'id': company_id, 'email': user_email}).fetchone()
+        
+        if not company:
+            return jsonify({'success': False, 'message': 'Company not found'}), 404
+        
+        # Delete company
+        db.session.execute(text('''
+            DELETE FROM company_profiles WHERE id = :id
+        '''), {'id': company_id})
+        
+        db.session.commit()
+        print(f"✅ Company deleted: {company.company_name} (ID {company_id}) by {user_email}")
+        
+        return jsonify({'success': True, 'message': 'Company deleted successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error deleting company: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/toggle-company-status/<int:company_id>', methods=['POST'])
+@login_required
+def toggle_company_status(company_id):
+    """Activate/deactivate company"""
+    try:
+        user_email = session.get('user_email')
+        
+        # Verify ownership
+        company = db.session.execute(text('''
+            SELECT company_name FROM company_profiles WHERE id = :id AND admin_email = :email
+        '''), {'id': company_id, 'email': user_email}).fetchone()
+        
+        if not company:
+            return jsonify({'success': False, 'message': 'Company not found'}), 404
+        
+        # Get new status
+        data = request.get_json()
+        is_active = data.get('is_active', 1)
+        
+        # Update status
+        db.session.execute(text('''
+            UPDATE company_profiles SET is_active = :is_active, updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+        '''), {'id': company_id, 'is_active': is_active})
+        
+        db.session.commit()
+        status = 'activated' if is_active else 'deactivated'
+        print(f"✅ Company {status}: {company.company_name} (ID {company_id}) by {user_email}")
+        
+        return jsonify({'success': True, 'message': f'Company {status} successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error toggling company status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/federal-coming-soon')
 def federal_coming_soon():

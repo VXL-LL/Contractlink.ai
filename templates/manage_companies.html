@@ -1,0 +1,587 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Client Companies - ContractLink.ai{% endblock %}
+
+{% block extra_css %}
+<style>
+    .company-card {
+        border: 1px solid #e3e3e3;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: box-shadow 0.3s ease;
+    }
+    .company-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .company-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    .company-name {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    .company-type-badge {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+    }
+    .company-detail {
+        display: flex;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+    .detail-label {
+        font-weight: 600;
+        color: #555;
+        min-width: 160px;
+    }
+    .detail-value {
+        color: #333;
+    }
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    .btn-add-company {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: transform 0.2s ease;
+    }
+    .btn-add-company:hover {
+        transform: translateY(-2px);
+        color: white;
+    }
+    .modal-header-custom {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    .form-section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #667eea;
+        margin-top: 25px;
+        margin-bottom: 15px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #667eea;
+    }
+    .inactive-badge {
+        background-color: #dc3545;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-building"></i> Manage Client Companies</h2>
+            <p class="text-muted">Organize bid documents and proposals by client company</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-add-company" data-bs-toggle="modal" data-bs-target="#companyModal" onclick="openAddCompanyModal()">
+                <i class="fas fa-plus"></i> Add New Company
+            </button>
+        </div>
+    </div>
+
+    {% if companies|length == 0 %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> No companies yet. Click "Add New Company" to create your first client profile.
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-md-12">
+            {% for company in companies %}
+            <div class="company-card">
+                <div class="company-header">
+                    <div>
+                        <span class="company-name">{{ company.company_name }}</span>
+                        {% if not company.is_active %}
+                        <span class="inactive-badge">INACTIVE</span>
+                        {% endif %}
+                    </div>
+                    <span class="company-type-badge">{{ company.business_type or 'Unknown Type' }}</span>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        {% if company.company_ein %}
+                        <div class="company-detail">
+                            <span class="detail-label">EIN:</span>
+                            <span class="detail-value">{{ company.company_ein }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if company.company_cage_code %}
+                        <div class="company-detail">
+                            <span class="detail-label">CAGE Code:</span>
+                            <span class="detail-value">{{ company.company_cage_code }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if company.company_uei %}
+                        <div class="company-detail">
+                            <span class="detail-label">UEI Number:</span>
+                            <span class="detail-value">{{ company.company_uei }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if company.company_duns %}
+                        <div class="company-detail">
+                            <span class="detail-label">DUNS Number:</span>
+                            <span class="detail-value">{{ company.company_duns }}</span>
+                        </div>
+                        {% endif %}
+
+                        <div class="company-detail">
+                            <span class="detail-label">Location:</span>
+                            <span class="detail-value">{{ company.city }}, {{ company.state }} {{ company.zip_code }}</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        {% if company.phone %}
+                        <div class="company-detail">
+                            <span class="detail-label">Phone:</span>
+                            <span class="detail-value">{{ company.phone }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if company.email %}
+                        <div class="company-detail">
+                            <span class="detail-label">Email:</span>
+                            <span class="detail-value">{{ company.email }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if company.website %}
+                        <div class="company-detail">
+                            <span class="detail-label">Website:</span>
+                            <span class="detail-value"><a href="{{ company.website }}" target="_blank">{{ company.website }}</a></span>
+                        </div>
+                        {% endif %}
+
+                        {% if company.certifications %}
+                        <div class="company-detail">
+                            <span class="detail-label">Certifications:</span>
+                            <span class="detail-value">{{ company.certifications }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if company.naics_codes %}
+                <div class="company-detail mt-2">
+                    <span class="detail-label">NAICS Codes:</span>
+                    <span class="detail-value">{{ company.naics_codes }}</span>
+                </div>
+                {% endif %}
+
+                <div class="action-buttons mt-3">
+                    <button class="btn btn-sm btn-primary" onclick="editCompany({{ company.id }})">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteCompany({{ company.id }}, '{{ company.company_name }}')">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                    {% if company.is_active %}
+                    <button class="btn btn-sm btn-warning" onclick="toggleCompanyStatus({{ company.id }}, 0)">
+                        <i class="fas fa-toggle-off"></i> Deactivate
+                    </button>
+                    {% else %}
+                    <button class="btn btn-sm btn-success" onclick="toggleCompanyStatus({{ company.id }}, 1)">
+                        <i class="fas fa-toggle-on"></i> Activate
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Company Modal (Add/Edit) -->
+<div class="modal fade" id="companyModal" tabindex="-1" aria-labelledby="companyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header modal-header-custom">
+                <h5 class="modal-title" id="companyModalLabel">Add New Company</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="companyForm">
+                    <input type="hidden" id="companyId" name="company_id">
+                    
+                    <!-- Basic Information -->
+                    <div class="form-section-title">
+                        <i class="fas fa-building"></i> Basic Information
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="companyName" class="form-label">Company Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="companyName" name="company_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="businessType" class="form-label">Business Type</label>
+                            <select class="form-select" id="businessType" name="business_type">
+                                <option value="">Select Type</option>
+                                <option value="Sole Proprietorship">Sole Proprietorship</option>
+                                <option value="Partnership">Partnership</option>
+                                <option value="LLC">LLC</option>
+                                <option value="Corporation">Corporation</option>
+                                <option value="S-Corporation">S-Corporation</option>
+                                <option value="Non-Profit">Non-Profit</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Federal Registration -->
+                    <div class="form-section-title">
+                        <i class="fas fa-id-card"></i> Federal Registration
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="ein" class="form-label">EIN</label>
+                            <input type="text" class="form-control" id="ein" name="ein" placeholder="XX-XXXXXXX">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="dunsNumber" class="form-label">DUNS Number</label>
+                            <input type="text" class="form-control" id="dunsNumber" name="duns_number" placeholder="XXXXXXXXX">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="cageCode" class="form-label">CAGE Code</label>
+                            <input type="text" class="form-control" id="cageCode" name="cage_code" placeholder="XXXXX">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="ueiNumber" class="form-label">UEI Number</label>
+                            <input type="text" class="form-control" id="ueiNumber" name="uei_number" placeholder="XXXXXXXXXXXX">
+                        </div>
+                    </div>
+
+                    <!-- Address -->
+                    <div class="form-section-title">
+                        <i class="fas fa-map-marker-alt"></i> Address
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="streetAddress" class="form-label">Street Address</label>
+                            <input type="text" class="form-control" id="streetAddress" name="street_address">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="city" class="form-label">City</label>
+                            <input type="text" class="form-control" id="city" name="city">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="state" class="form-label">State</label>
+                            <input type="text" class="form-control" id="state" name="state" placeholder="VA">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="zipCode" class="form-label">ZIP Code</label>
+                            <input type="text" class="form-control" id="zipCode" name="zip_code">
+                        </div>
+                    </div>
+
+                    <!-- Contact Information -->
+                    <div class="form-section-title">
+                        <i class="fas fa-phone"></i> Contact Information
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="phone" name="phone">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="website" class="form-label">Website</label>
+                            <input type="url" class="form-control" id="website" name="website">
+                        </div>
+                    </div>
+
+                    <!-- Industry Codes -->
+                    <div class="form-section-title">
+                        <i class="fas fa-industry"></i> NAICS Codes & Certifications
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="primaryNaics" class="form-label">Primary NAICS Codes</label>
+                            <input type="text" class="form-control" id="primaryNaics" name="primary_naics_codes" placeholder="561720, 561730">
+                            <small class="text-muted">Comma-separated list</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="secondaryNaics" class="form-label">Secondary NAICS Codes</label>
+                            <input type="text" class="form-control" id="secondaryNaics" name="secondary_naics_codes" placeholder="562111, 238990">
+                            <small class="text-muted">Comma-separated list</small>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label for="certifications" class="form-label">Certifications</label>
+                            <input type="text" class="form-control" id="certifications" name="certifications" placeholder="8(a), WOSB, SDVOSB, HUBZone">
+                            <small class="text-muted">e.g., 8(a), Woman-Owned Small Business, HUBZone</small>
+                        </div>
+                    </div>
+
+                    <!-- Company Details -->
+                    <div class="form-section-title">
+                        <i class="fas fa-chart-line"></i> Company Details
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="yearEstablished" class="form-label">Year Established</label>
+                            <input type="number" class="form-control" id="yearEstablished" name="year_established" min="1900" max="2030">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="annualRevenue" class="form-label">Annual Revenue</label>
+                            <input type="text" class="form-control" id="annualRevenue" name="annual_revenue" placeholder="$500,000">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="employeeCount" class="form-label">Employee Count</label>
+                            <input type="number" class="form-control" id="employeeCount" name="employee_count">
+                        </div>
+                    </div>
+
+                    <!-- Service Areas -->
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="serviceAreas" class="form-label">Service Areas</label>
+                            <input type="text" class="form-control" id="serviceAreas" name="service_areas" placeholder="Virginia, Maryland, DC">
+                            <small class="text-muted">Comma-separated list of states/regions</small>
+                        </div>
+                    </div>
+
+                    <!-- Capabilities -->
+                    <div class="form-section-title">
+                        <i class="fas fa-certificate"></i> Capabilities & Performance
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="pastPerformance" class="form-label">Past Performance Summary</label>
+                            <textarea class="form-control" id="pastPerformance" name="past_performance_summary" rows="3" placeholder="Brief summary of relevant contracts and performance..."></textarea>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="bondingCapacity" class="form-label">Bonding Capacity</label>
+                            <input type="text" class="form-control" id="bondingCapacity" name="bonding_capacity" placeholder="$5,000,000">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="insuranceCoverage" class="form-label">Insurance Coverage</label>
+                            <input type="text" class="form-control" id="insuranceCoverage" name="insurance_coverage" placeholder="$2,000,000 General Liability">
+                        </div>
+                    </div>
+
+                    <!-- Key Personnel -->
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="keyPersonnel" class="form-label">Key Personnel</label>
+                            <textarea class="form-control" id="keyPersonnel" name="key_personnel" rows="2" placeholder="CEO: John Doe; Operations Manager: Jane Smith"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Additional Information -->
+                    <div class="form-section-title">
+                        <i class="fas fa-info-circle"></i> Additional Information
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="capabilityStatementUrl" class="form-label">Capability Statement URL</label>
+                            <input type="url" class="form-control" id="capabilityStatementUrl" name="capability_statement_url">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="businessHours" class="form-label">Business Hours</label>
+                            <input type="text" class="form-control" id="businessHours" name="business_hours" placeholder="Mon-Fri 8AM-5PM EST">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="preferredContact" class="form-label">Preferred Contact Method</label>
+                            <select class="form-select" id="preferredContact" name="preferred_contact_method">
+                                <option value="">Select Method</option>
+                                <option value="Email">Email</option>
+                                <option value="Phone">Phone</option>
+                                <option value="Portal">Portal</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="isActive" class="form-label">Status</label>
+                            <select class="form-select" id="isActive" name="is_active">
+                                <option value="1">Active</option>
+                                <option value="0">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Internal notes about this company..."></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveCompany()">
+                    <i class="fas fa-save"></i> Save Company
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let editingCompanyId = null;
+
+function openAddCompanyModal() {
+    editingCompanyId = null;
+    document.getElementById('companyModalLabel').textContent = 'Add New Company';
+    document.getElementById('companyForm').reset();
+    document.getElementById('companyId').value = '';
+}
+
+function editCompany(companyId) {
+    editingCompanyId = companyId;
+    document.getElementById('companyModalLabel').textContent = 'Edit Company';
+    
+    // Fetch company data
+    fetch(`/api/get-company/${companyId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const company = data.company;
+                document.getElementById('companyId').value = company.id;
+                document.getElementById('companyName').value = company.company_name || '';
+                document.getElementById('businessType').value = company.business_type || '';
+                document.getElementById('ein').value = company.ein || '';
+                document.getElementById('dunsNumber').value = company.duns_number || '';
+                document.getElementById('cageCode').value = company.cage_code || '';
+                document.getElementById('ueiNumber').value = company.uei_number || '';
+                document.getElementById('streetAddress').value = company.street_address || '';
+                document.getElementById('city').value = company.city || '';
+                document.getElementById('state').value = company.state || '';
+                document.getElementById('zipCode').value = company.zip_code || '';
+                document.getElementById('phone').value = company.phone || '';
+                document.getElementById('email').value = company.email || '';
+                document.getElementById('website').value = company.website || '';
+                document.getElementById('primaryNaics').value = company.primary_naics_codes || '';
+                document.getElementById('secondaryNaics').value = company.secondary_naics_codes || '';
+                document.getElementById('certifications').value = company.certifications || '';
+                document.getElementById('yearEstablished').value = company.year_established || '';
+                document.getElementById('annualRevenue').value = company.annual_revenue || '';
+                document.getElementById('employeeCount').value = company.employee_count || '';
+                document.getElementById('serviceAreas').value = company.service_areas || '';
+                document.getElementById('pastPerformance').value = company.past_performance_summary || '';
+                document.getElementById('bondingCapacity').value = company.bonding_capacity || '';
+                document.getElementById('insuranceCoverage').value = company.insurance_coverage || '';
+                document.getElementById('keyPersonnel').value = company.key_personnel || '';
+                document.getElementById('capabilityStatementUrl').value = company.capability_statement_url || '';
+                document.getElementById('businessHours').value = company.business_hours || '';
+                document.getElementById('preferredContact').value = company.preferred_contact_method || '';
+                document.getElementById('isActive').value = company.is_active ? '1' : '0';
+                document.getElementById('notes').value = company.notes || '';
+                
+                // Open modal
+                const modal = new bootstrap.Modal(document.getElementById('companyModal'));
+                modal.show();
+            } else {
+                alert('Error loading company data: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading company data. Please try again.');
+        });
+}
+
+function saveCompany() {
+    const formData = new FormData(document.getElementById('companyForm'));
+    const companyId = document.getElementById('companyId').value;
+    
+    const url = companyId ? `/api/update-company/${companyId}` : '/api/create-company';
+    const method = companyId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(companyId ? 'Company updated successfully!' : 'Company created successfully!');
+            location.reload();
+        } else {
+            alert('Error saving company: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving company. Please try again.');
+    });
+}
+
+function deleteCompany(companyId, companyName) {
+    if (!confirm(`Are you sure you want to delete "${companyName}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    fetch(`/api/delete-company/${companyId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Company deleted successfully!');
+            location.reload();
+        } else {
+            alert('Error deleting company: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error deleting company. Please try again.');
+    });
+}
+
+function toggleCompanyStatus(companyId, newStatus) {
+    const action = newStatus === 1 ? 'activate' : 'deactivate';
+    
+    if (!confirm(`Are you sure you want to ${action} this company?`)) {
+        return;
+    }
+    
+    fetch(`/api/toggle-company-status/${companyId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ is_active: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Company ${action}d successfully!`);
+            location.reload();
+        } else {
+            alert(`Error ${action}ing company: ` + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Error ${action}ing company. Please try again.`);
+    });
+}
+</script>
+{% endblock %}
