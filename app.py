@@ -23624,15 +23624,19 @@ def upload_bid_document():
     """
     try:
         user_email = session.get('user_email')
+        print(f"📤 Upload request from user: {user_email}")
         
         # Check if file was uploaded
         if 'file' not in request.files:
+            print("❌ No file in request")
             return jsonify({'success': False, 'error': 'No file provided'}), 400
         
         file = request.files['file']
         file_type = request.form.get('file_type', 'other')
+        print(f"📄 File: {file.filename}, Type: {file_type}")
         
         if file.filename == '':
+            print("❌ Empty filename")
             return jsonify({'success': False, 'error': 'No file selected'}), 400
         
         # Validate file type
@@ -23640,6 +23644,7 @@ def upload_bid_document():
         file_ext = os.path.splitext(file.filename)[1].lower()
         
         if file_ext not in allowed_extensions:
+            print(f"❌ Invalid extension: {file_ext}")
             return jsonify({
                 'success': False, 
                 'error': f'Unsupported file type. Please upload PDF, DOCX, or TXT files.'
@@ -23651,6 +23656,7 @@ def upload_bid_document():
         file.seek(0)
         
         if file_size > 10 * 1024 * 1024:  # 10MB
+            print(f"❌ File too large: {file_size} bytes")
             return jsonify({
                 'success': False,
                 'error': 'File too large. Maximum size is 10MB.'
@@ -23659,27 +23665,33 @@ def upload_bid_document():
         # Create uploads directory if it doesn't exist
         upload_dir = os.path.join(os.getcwd(), 'uploads', 'bid_documents')
         os.makedirs(upload_dir, exist_ok=True)
+        print(f"📁 Upload directory: {upload_dir}")
         
         # Generate unique filename
         import uuid
         unique_id = str(uuid.uuid4())[:8]
-        safe_filename = f"{unique_id}_{secure_filename(file.filename)}"
-        file_path = os.path.join(upload_dir, safe_filename)
+        safe_filename_str = f"{unique_id}_{secure_filename(file.filename)}"
+        file_path = os.path.join(upload_dir, safe_filename_str)
         
         # Save file
         file.save(file_path)
         print(f"✅ File saved: {file_path}")
         
         # Extract text from document
-        from document_extractor import extract_text_from_file, clean_extracted_text
-        success, extracted_text, error = extract_text_from_file(file_path)
-        
-        if success:
-            cleaned_text = clean_extracted_text(extracted_text)
-            print(f"✅ Text extracted: {len(cleaned_text)} characters")
-        else:
-            cleaned_text = f"Text extraction failed: {error}"
-            print(f"⚠️ Text extraction warning: {error}")
+        try:
+            from document_extractor import extract_text_from_file, clean_extracted_text
+            success, extracted_text, error = extract_text_from_file(file_path)
+            
+            if success:
+                cleaned_text = clean_extracted_text(extracted_text)
+                print(f"✅ Text extracted: {len(cleaned_text)} characters")
+            else:
+                cleaned_text = f"Text extraction failed: {error}"
+                print(f"⚠️ Text extraction warning: {error}")
+        except Exception as extract_error:
+            print(f"⚠️ Text extraction exception: {extract_error}")
+            cleaned_text = "Text extraction not available"
+            success = False
         
         # Store document info in database
         try:
@@ -23689,7 +23701,7 @@ def upload_bid_document():
                 VALUES (:email, :filename, :original, :type, :path, :size, :text)
             '''), {
                 'email': user_email,
-                'filename': safe_filename,
+                'filename': safe_filename_str,
                 'original': file.filename,
                 'type': file_type,
                 'path': file_path,
@@ -23697,7 +23709,7 @@ def upload_bid_document():
                 'text': cleaned_text
             })
             db.session.commit()
-            print(f"✅ Document record saved to database")
+            print(f"✅ Document record saved to database for {user_email}")
             
             return jsonify({
                 'success': True,
@@ -23714,9 +23726,11 @@ def upload_bid_document():
             if os.path.exists(file_path):
                 os.remove(file_path)
             print(f"❌ Database error: {db_error}")
+            import traceback
+            traceback.print_exc()
             return jsonify({
                 'success': False,
-                'error': 'Failed to save document information'
+                'error': f'Failed to save document information: {str(db_error)}'
             }), 500
             
     except Exception as e:
