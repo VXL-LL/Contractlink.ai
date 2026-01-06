@@ -4303,6 +4303,85 @@ def init_postgres_db():
             print(f"⚠️  User portal registrations table init: {portal_reg_err}")
         
         # NOTE: Sample data removed - real data will be fetched from SAM.gov API and local government scrapers
+        
+        # Create user_bid_documents table for document upload system
+        db.session.execute(text('''CREATE TABLE IF NOT EXISTS user_bid_documents
+                     (id SERIAL PRIMARY KEY,
+                      user_email TEXT NOT NULL,
+                      filename TEXT NOT NULL,
+                      original_filename TEXT NOT NULL,
+                      file_type TEXT NOT NULL,
+                      file_path TEXT NOT NULL,
+                      file_size INTEGER NOT NULL,
+                      extracted_text TEXT,
+                      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      last_used TIMESTAMP,
+                      metadata TEXT,
+                      company_id INTEGER,
+                      FOREIGN KEY (user_email) REFERENCES leads(email),
+                      FOREIGN KEY (company_id) REFERENCES company_profiles(id))'''))
+        
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_bid_docs_user ON user_bid_documents(user_email)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_bid_docs_type ON user_bid_documents(file_type)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_bid_docs_company ON user_bid_documents(company_id)'))
+        db.session.commit()
+        
+        # Create company_profiles table for admin multi-company management
+        db.session.execute(text('''CREATE TABLE IF NOT EXISTS company_profiles
+                     (id SERIAL PRIMARY KEY,
+                      admin_email TEXT NOT NULL,
+                      company_name TEXT NOT NULL,
+                      company_ein TEXT,
+                      company_duns TEXT,
+                      company_cage_code TEXT,
+                      company_uei TEXT,
+                      address TEXT,
+                      city TEXT,
+                      state TEXT,
+                      zip_code TEXT,
+                      phone TEXT,
+                      website TEXT,
+                      primary_contact_name TEXT,
+                      primary_contact_email TEXT,
+                      primary_contact_phone TEXT,
+                      business_type TEXT,
+                      certifications TEXT,
+                      naics_codes TEXT,
+                      years_in_business INTEGER,
+                      employee_count INTEGER,
+                      annual_revenue TEXT,
+                      bonding_capacity TEXT,
+                      insurance_info TEXT,
+                      past_performance TEXT,
+                      specialty_areas TEXT,
+                      service_regions TEXT,
+                      notes TEXT,
+                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      is_active BOOLEAN DEFAULT TRUE,
+                      FOREIGN KEY (admin_email) REFERENCES leads(email))'''))
+        
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_admin ON company_profiles(admin_email)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_active ON company_profiles(is_active)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_name ON company_profiles(company_name)'))
+        db.session.commit()
+        
+        # Create company_bid_documents linking table for many-to-many relationships
+        db.session.execute(text('''CREATE TABLE IF NOT EXISTS company_bid_documents
+                     (id SERIAL PRIMARY KEY,
+                      company_id INTEGER NOT NULL,
+                      document_id INTEGER NOT NULL,
+                      relationship TEXT DEFAULT 'general',
+                      notes TEXT,
+                      linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      FOREIGN KEY (company_id) REFERENCES company_profiles(id) ON DELETE CASCADE,
+                      FOREIGN KEY (document_id) REFERENCES user_bid_documents(id) ON DELETE CASCADE,
+                      UNIQUE(company_id, document_id))'''))
+        
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_bid_docs_company ON company_bid_documents(company_id)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_bid_docs_document ON company_bid_documents(document_id)'))
+        db.session.commit()
+        
         print("✅ PostgreSQL database tables initialized successfully")
         if os.environ.get('FETCH_ON_INIT', '0') == '1':
             print("📡 Fetching real federal contracts from SAM.gov API...")
