@@ -239,58 +239,55 @@ def get_kb_answer(user_text: str, role: Optional[str] = None, user_email: Option
     if any(kw in cleaned for kw in document_keywords) and user_email:
         # Try to get user's uploaded documents
         try:
-            from flask import current_app
             from sqlalchemy import text
+            from database import db
             
-            with current_app.app_context():
-                from database import db
-                
-                docs = db.session.execute(text('''
-                    SELECT original_filename, file_type, extracted_text
-                    FROM user_bid_documents
-                    WHERE user_email = :email
-                    ORDER BY uploaded_at DESC
-                    LIMIT 5
-                '''), {'email': user_email}).fetchall()
-                
-                if docs:
-                    # Build context from uploaded documents
-                    doc_context = "<strong>Your Uploaded Documents:</strong><br>"
-                    for idx, doc in enumerate(docs, 1):
-                        filename = doc[0]
-                        file_type = doc[1]
-                        text_preview = (doc[2] or '')[:500]  # First 500 chars
-                        
-                        doc_context += f"<br>{idx}. <strong>{filename}</strong> ({file_type})<br>"
-                        if text_preview:
-                            doc_context += f"<em>Content preview:</em> {text_preview}...<br>"
+            docs = db.session.execute(text('''
+                SELECT original_filename, file_type, extracted_text
+                FROM user_bid_documents
+                WHERE user_email = :email
+                ORDER BY uploaded_at DESC
+                LIMIT 5
+            '''), {'email': user_email}).fetchall()
+            
+            if docs:
+                # Build context from uploaded documents
+                doc_context = "<strong>Your Uploaded Documents:</strong><br>"
+                for idx, doc in enumerate(docs, 1):
+                    filename = doc[0]
+                    file_type = doc[1]
+                    text_preview = (doc[2] or '')[:500]  # First 500 chars
                     
-                    doc_context += ("<br><strong>How I can help:</strong><br>"
-                                   "• Answer specific questions about requirements in your documents<br>"
-                                   "• Help you fill out forms with appropriate responses<br>"
-                                   "• Suggest compliance strategies based on RFP sections<br>"
-                                   "• Review your uploaded capability statement for improvements<br>"
-                                   "• Provide guidance on addendum changes<br><br>"
-                                   "<em>Tip:</em> Be specific about which document and section you need help with. "
-                                   "For example: 'What does Section 3.2 of my RFP require?' or "
-                                   "'Help me fill out the experience section of my coversheet.'")
-                    
-                    return {
-                        "answer": doc_context,
-                        "followups": "Ask about specific RFP sections | Request form fill-in help | Get compliance guidance",
-                        "source": "uploaded_documents"
-                    }
-                else:
-                    return {
-                        "answer": ("<strong>No Documents Found</strong><br>"
-                                  "I notice you're asking about documents, but you haven't uploaded any yet. "
-                                  "Upload your RFP, coversheet, addendum, capability statement, or intake forms "
-                                  "using the document upload section on the right, and I'll be able to help you "
-                                  "analyze requirements and fill out sections!<br><br>"
-                                  "<em>Supported formats:</em> PDF, DOCX, TXT (up to 10MB)"),
-                        "followups": "Upload a document | Ask about proposal structure | Need pricing guidance",
-                        "source": "no_documents"
-                    }
+                    doc_context += f"<br>{idx}. <strong>{filename}</strong> ({file_type})<br>"
+                    if text_preview:
+                        doc_context += f"<em>Content preview:</em> {text_preview}...<br>"
+                
+                doc_context += ("<br><strong>How I can help:</strong><br>"
+                               "• Answer specific questions about requirements in your documents<br>"
+                               "• Help you fill out forms with appropriate responses<br>"
+                               "• Suggest compliance strategies based on RFP sections<br>"
+                               "• Review your uploaded capability statement for improvements<br>"
+                               "• Provide guidance on addendum changes<br><br>"
+                               "<em>Tip:</em> Be specific about which document and section you need help with. "
+                               "For example: 'What does Section 3.2 of my RFP require?' or "
+                               "'Help me fill out the experience section of my coversheet.'")
+                
+                return {
+                    "answer": doc_context,
+                    "followups": "Ask about specific RFP sections | Request form fill-in help | Get compliance guidance",
+                    "source": "uploaded_documents"
+                }
+            else:
+                return {
+                    "answer": ("<strong>No Documents Found</strong><br>"
+                              "I notice you're asking about documents, but you haven't uploaded any yet. "
+                              "Upload your RFP, coversheet, addendum, capability statement, or intake forms "
+                              "using the document upload section on the right, and I'll be able to help you "
+                              "analyze requirements and fill out sections!<br><br>"
+                              "<em>Supported formats:</em> PDF, DOCX, TXT (up to 10MB)"),
+                    "followups": "Upload a document | Ask about proposal structure | Need pricing guidance",
+                    "source": "no_documents"
+                }
         except Exception as e:
             # If document lookup fails, continue with regular KB matching
             print(f"Document lookup error: {e}")
