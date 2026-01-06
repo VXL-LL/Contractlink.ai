@@ -24101,36 +24101,36 @@ def get_company(company_id):
         if not company:
             return jsonify({'success': False, 'message': 'Company not found'}), 404
         
-        # Convert to dict
+        # Convert to dict - using actual database column names
         company_dict = {
             'id': company.id,
             'company_name': company.company_name,
             'business_type': company.business_type,
-            'ein': company.ein,
-            'duns_number': company.duns_number,
-            'cage_code': company.cage_code,
-            'uei_number': company.uei_number,
-            'street_address': company.street_address,
+            'ein': company.company_ein,
+            'duns_number': company.company_duns,
+            'cage_code': company.company_cage_code,
+            'uei_number': company.company_uei,
+            'street_address': company.address,
             'city': company.city,
             'state': company.state,
             'zip_code': company.zip_code,
             'phone': company.phone,
-            'email': company.email,
+            'email': company.primary_contact_email,
             'website': company.website,
-            'primary_naics_codes': company.primary_naics_codes,
-            'secondary_naics_codes': company.secondary_naics_codes,
+            'primary_naics_codes': company.naics_codes,
+            'secondary_naics_codes': '',  # Not in schema
             'certifications': company.certifications,
-            'year_established': company.year_established,
+            'year_established': company.years_in_business,
             'annual_revenue': company.annual_revenue,
             'employee_count': company.employee_count,
-            'service_areas': company.service_areas,
-            'past_performance_summary': company.past_performance_summary,
+            'service_areas': company.service_regions,
+            'past_performance_summary': company.past_performance,
             'bonding_capacity': company.bonding_capacity,
-            'insurance_coverage': company.insurance_coverage,
-            'key_personnel': company.key_personnel,
-            'capability_statement_url': company.capability_statement_url,
-            'business_hours': company.business_hours,
-            'preferred_contact_method': company.preferred_contact_method,
+            'insurance_coverage': company.insurance_info,
+            'key_personnel': company.primary_contact_name,
+            'capability_statement_url': '',  # Not in schema
+            'business_hours': '',  # Not in schema
+            'preferred_contact_method': '',  # Not in schema
             'notes': company.notes,
             'is_active': company.is_active
         }
@@ -24139,6 +24139,8 @@ def get_company(company_id):
         
     except Exception as e:
         print(f"❌ Error fetching company: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/update-company/<int:company_id>', methods=['PUT', 'POST'])
@@ -24156,36 +24158,32 @@ def update_company(company_id):
         if not company:
             return jsonify({'success': False, 'message': 'Company not found'}), 404
         
-        # Update company
+        # Update company - using actual database column names
         db.session.execute(text('''
             UPDATE company_profiles SET
                 company_name = :company_name,
                 business_type = :business_type,
-                ein = :ein,
-                duns_number = :duns_number,
-                cage_code = :cage_code,
-                uei_number = :uei_number,
-                street_address = :street_address,
+                company_ein = :ein,
+                company_duns = :duns_number,
+                company_cage_code = :cage_code,
+                company_uei = :uei_number,
+                address = :street_address,
                 city = :city,
                 state = :state,
                 zip_code = :zip_code,
                 phone = :phone,
-                email = :email,
+                primary_contact_email = :email,
                 website = :website,
-                primary_naics_codes = :primary_naics_codes,
-                secondary_naics_codes = :secondary_naics_codes,
+                naics_codes = :primary_naics_codes,
                 certifications = :certifications,
-                year_established = :year_established,
+                years_in_business = :year_established,
                 annual_revenue = :annual_revenue,
                 employee_count = :employee_count,
-                service_areas = :service_areas,
-                past_performance_summary = :past_performance_summary,
+                service_regions = :service_areas,
+                past_performance = :past_performance_summary,
                 bonding_capacity = :bonding_capacity,
-                insurance_coverage = :insurance_coverage,
-                key_personnel = :key_personnel,
-                capability_statement_url = :capability_statement_url,
-                business_hours = :business_hours,
-                preferred_contact_method = :preferred_contact_method,
+                insurance_info = :insurance_coverage,
+                primary_contact_name = :key_personnel,
                 notes = :notes,
                 is_active = :is_active,
                 updated_at = CURRENT_TIMESTAMP
@@ -24206,7 +24204,6 @@ def update_company(company_id):
             'email': request.form.get('email'),
             'website': request.form.get('website'),
             'primary_naics_codes': request.form.get('primary_naics_codes'),
-            'secondary_naics_codes': request.form.get('secondary_naics_codes'),
             'certifications': request.form.get('certifications'),
             'year_established': request.form.get('year_established') or None,
             'annual_revenue': request.form.get('annual_revenue'),
@@ -24216,9 +24213,6 @@ def update_company(company_id):
             'bonding_capacity': request.form.get('bonding_capacity'),
             'insurance_coverage': request.form.get('insurance_coverage'),
             'key_personnel': request.form.get('key_personnel'),
-            'capability_statement_url': request.form.get('capability_statement_url'),
-            'business_hours': request.form.get('business_hours'),
-            'preferred_contact_method': request.form.get('preferred_contact_method'),
             'notes': request.form.get('notes'),
             'is_active': request.form.get('is_active', '1')
         })
