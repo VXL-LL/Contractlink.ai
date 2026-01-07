@@ -23992,21 +23992,75 @@ def manage_companies():
     user_email = session.get('user_email')
     
     try:
-        # Query all companies managed by this admin
-        companies = db.session.execute(text('''
-            SELECT 
-                id, company_name, business_type, company_ein, company_duns, company_cage_code, company_uei,
-                address, city, state, zip_code, phone, website,
-                naics_codes, certifications,
-                years_in_business, annual_revenue, employee_count, service_regions,
-                past_performance, bonding_capacity, insurance_info,
-                notes, is_active, created_at, updated_at
-            FROM company_profiles 
-            WHERE admin_email = :email 
-            ORDER BY company_name ASC
-        '''), {'email': user_email}).fetchall()
-        
-        print(f"📊 Admin {user_email} managing {len(companies)} companies")
+        # Ensure table exists (handles case where production DB doesn't have it yet)
+        try:
+            # Try to query the table
+            companies = db.session.execute(text('''
+                SELECT 
+                    id, company_name, business_type, company_ein, company_duns, company_cage_code, company_uei,
+                    address, city, state, zip_code, phone, website,
+                    naics_codes, certifications,
+                    years_in_business, annual_revenue, employee_count, service_regions,
+                    past_performance, bonding_capacity, insurance_info,
+                    notes, is_active, created_at, updated_at
+                FROM company_profiles 
+                WHERE admin_email = :email 
+                ORDER BY company_name ASC
+            '''), {'email': user_email}).fetchall()
+            
+            print(f"📊 Admin {user_email} managing {len(companies)} companies")
+            
+        except Exception as table_error:
+            # Table might not exist - create it
+            if 'does not exist' in str(table_error) or 'relation' in str(table_error):
+                print(f"⚠️  company_profiles table doesn't exist - creating it now...")
+                
+                # Create the table
+                db.session.execute(text('''CREATE TABLE IF NOT EXISTS company_profiles
+                             (id SERIAL PRIMARY KEY,
+                              admin_email TEXT NOT NULL,
+                              company_name TEXT NOT NULL,
+                              company_ein TEXT,
+                              company_duns TEXT,
+                              company_cage_code TEXT,
+                              company_uei TEXT,
+                              address TEXT,
+                              city TEXT,
+                              state TEXT,
+                              zip_code TEXT,
+                              phone TEXT,
+                              website TEXT,
+                              primary_contact_name TEXT,
+                              primary_contact_email TEXT,
+                              primary_contact_phone TEXT,
+                              business_type TEXT,
+                              certifications TEXT,
+                              naics_codes TEXT,
+                              years_in_business INTEGER,
+                              employee_count INTEGER,
+                              annual_revenue TEXT,
+                              bonding_capacity TEXT,
+                              insurance_info TEXT,
+                              past_performance TEXT,
+                              specialty_areas TEXT,
+                              service_regions TEXT,
+                              notes TEXT,
+                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              is_active BOOLEAN DEFAULT TRUE)'''))
+                
+                db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_admin ON company_profiles(admin_email)'))
+                db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_active ON company_profiles(is_active)'))
+                db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_name ON company_profiles(company_name)'))
+                db.session.commit()
+                
+                print("✅ company_profiles table created successfully")
+                
+                # Return empty list since table was just created
+                companies = []
+            else:
+                # Different error - re-raise
+                raise table_error
         
         return render_template('manage_companies.html', companies=companies)
         
