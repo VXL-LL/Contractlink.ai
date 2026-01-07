@@ -4358,8 +4358,7 @@ def init_postgres_db():
                       notes TEXT,
                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                      is_active BOOLEAN DEFAULT TRUE,
-                      FOREIGN KEY (admin_email) REFERENCES leads(email))'''))
+                      is_active BOOLEAN DEFAULT TRUE)'''))
         
         db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_admin ON company_profiles(admin_email)'))
         db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_company_profiles_active ON company_profiles(is_active)'))
